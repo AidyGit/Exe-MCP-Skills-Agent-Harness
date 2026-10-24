@@ -68,6 +68,8 @@ class Agent:
             elif isinstance(msg, ResultMessage):
                 result = msg
         self.session_id = result.session_id
+        if result.is_error:  # e.g. "Not logged in": stop instead of saving empty results
+            raise RuntimeError(f"Claude Code error: {''.join(text) or result.result}")
         u = result.usage or {}
         cost = result.total_cost_usd or 0.0
         delta = cost - self._prev_cost if cost >= self._prev_cost else cost  # replaces: tokens.py (cost per turn)

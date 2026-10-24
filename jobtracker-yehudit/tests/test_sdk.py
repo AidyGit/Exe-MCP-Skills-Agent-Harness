@@ -69,3 +69,20 @@ def test_turn_parses_result_message(tmp_path):
     r = asyncio.run(agent.turn("x"))
     assert r["tools"] == ["add_job"] and r["reply"] == "done" and r["cache_hit_pct"] == 90.0
     assert r["model_calls"] == 2 and r["cost_usd"] == 0.5
+
+
+def test_turn_raises_on_error_result(tmp_path):
+    from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+
+    class FailingClient:
+        async def query(self, text): pass
+
+        async def receive_response(self):
+            yield AssistantMessage(content=[TextBlock(text="Not logged in")], model="m")
+            yield ResultMessage(subtype="error", duration_ms=1, duration_api_ms=1, is_error=True,
+                                num_turns=1, session_id="sid", total_cost_usd=0.0, usage={})
+
+    ws = Workspace.fresh(tmp_path / "w", memory_filename="CLAUDE.md")
+    agent = sdk_agent.Agent(ws, client=FailingClient())
+    with pytest.raises(RuntimeError, match="Not logged in"):
+        asyncio.run(agent.turn("x"))

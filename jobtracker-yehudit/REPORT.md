@@ -1,30 +1,37 @@
 # REPORT — Job-search tracker: API harness vs Agent SDK
 
-> **Status:** the code, offline tests (25 passing) and scenario are done. The numbers below must be
-> filled in after running both versions on a real key / login (`python scripts/report_table.py`
-> prints these tables from `results/api.json` and `results/sdk.json`). Sections 3–5 are my analysis
-> from the design; confirm them against your measured numbers before submitting.
+## Status — read first
+**The benchmark was not executed.** The API version needs a Claude Console key with credit, and the SDK version needs a
+Claude Code login on a Pro/Max plan; neither was available (Claude Code answered "Claude Max or Pro is required").
+So **there are no measured tokens, costs or latencies below**, and sections 3–5 are analysis from the design, not measurements.
+What is verified: 26 offline tests (`python -m pytest -q`) run the real API harness against a scripted fake client —
+including the full 7-turn scenario and its 8 checks — and check the SDK options and tool handlers.
+Everything is ready to run: see `README.md`, then `python scripts/report_table.py` prints the tables from the results files.
 
 ## The agent
-Tracks job applications (`add_job`, `list_jobs`, `update_job_status`), reads a posting from a file or URL
-(`fetch_job_posting` — the external tool), and remembers search criteria (`save_memory`, `recall_memory`).
-Scenario: 2 sessions, 7 turns; session 2 is a brand-new agent instance that loads state from disk. It covers tool use,
-saving to memory, recall in session 2, the external tool, and a request (Java job) that contradicts a saved preference.
-8 pass/fail checks, almost all on persisted state (`jobs.json`, memory file), e.g. the Wix/Java job must **not** be in the tracker.
+A job-search tracker. Tools: `add_job`, `list_jobs`, `update_job_status`, `save_memory`, `recall_memory`, and the external tool
+`fetch_job_posting` (local file or URL). Memory persists in a markdown file (`memory.md` in the API version, `CLAUDE.md` in the SDK version).
+Scenario (`scenario.json`): 2 sessions, 7 turns; session 2 is a new agent instance that loads state from disk. It covers tool use,
+saving to memory, recall in session 2, the external tool, and a Java job that contradicts a saved ".NET only" preference.
+8 pass/fail checks, almost all on persisted state (`jobs.json`, memory file) — e.g. the Wix/Java job must not be in the tracker.
 
-## 1. API vs SDK (fill from results)
+## Four required topics
+- **Tools:** 6 tools, JSON schemas in `shared/tools_core.py`; errors return to the model as `is_error`.
+- **Memory:** key/kind entries in a markdown file, upsert by key; survives a new agent instance.
+- **Context engineering (API):** each turn injects only preferences, memory entries relevant to the message, and job counts — not the whole state.
+- **Token optimization:** minified JSON tool output; per-turn token/cost/latency report; prompt caching breakpoints; compaction past a threshold.
+
+## 1. API vs SDK — measured results
 | | API | SDK |
 |---|---|---|
-| input (uncached) | | |
-| cache read | | |
-| cache write | | |
-| output | | |
-| cache hit % | | |
-| model calls | | |
-| cost USD | | |
-| checks passed | /8 | /8 |
+| input / cache read / cache write / output tokens | not run | not run |
+| cache hit % | not run | not run |
+| model calls | not run | not run |
+| cost USD | not run | not run |
+| scenario checks passed (live model) | not run | not run |
+| scenario checks passed (scripted fake model, offline) | 8/8 | n/a (loop runs inside Claude Code) |
 
-## 2. Harness lines of code
+## 2. Harness lines of code (counted from the code, `shared/linecount.py`)
 | part | API | SDK |
 |---|---|---|
 | loop | 34 | 3 |
@@ -38,26 +45,19 @@ saving to memory, recall in session 2, the external tool, and a request (Java jo
 | trace (helper) | 3 | 0 |
 | **total** | **177** | **9** |
 
-(Counts come from `shared/linecount.py`; regenerate with `scripts/report_table.py`.)
+## 3. Where the SDK would use more / fewer tokens (expectation, NOT measured)
+- **Likely more:** Claude Code adds its own scaffolding around my system prompt and tool wrappers on every call, and one SDK turn can include several internal model calls. In a short agent this overhead is a large share.
+- **Likely fewer or cheaper:** caching is automatic. In my API version, breakpoints only pay off once the prefix passes the model's minimum cacheable length; my system prompt plus 6 tool schemas are short, so API cache hits may be near 0%.
+- **Context:** the API version injects only relevant memory; the SDK loads the whole `CLAUDE.md` each session, which grows with memory.
 
-## 3. Where the SDK used more / fewer tokens, and why (expectation — verify)
-- **More:** Claude Code sends its own scaffolding on every call (tool/MCP wrappers, its framing around my system prompt),
-  and the SDK's `ResultMessage.usage` may count several internal model calls per turn. Short agents feel this most.
-- **Fewer / cheaper:** caching is automatic and tuned; the API version's breakpoints help only once the prefix passes
-  the model's minimum cacheable length — my system prompt + 6 tool schemas are short, so API cache hits may be near 0%.
-- **Context:** in the API version I inject only preferences + relevant memory + job counts per turn. In the SDK,
-  `CLAUDE.md` is loaded whole every session, so it grows with memory (fine for a few lines, wasteful at scale).
+## 4. What I controlled in the API and lose in the SDK
+- Exactly what enters each turn (relevance-based memory selection vs whole `CLAUDE.md`).
+- Cache breakpoints, compaction threshold and prompt, max-steps guard.
+- The shape of errors returned to the model, and per-call token accounting (the SDK reports per-turn totals).
+- Conversation storage format (append-only JSONL vs the SDK's internal session store).
+- Deterministic offline testing of the loop: the API loop is tested with a fake client; the SDK loop lives inside the Claude Code process, so I can only test configuration and tool handlers.
 
-## 4. What I controlled in the API and lost in the SDK
-- Exactly what enters each turn (relevance-based memory selection vs. whole `CLAUDE.md`).
-- Cache breakpoints, compaction threshold/prompt, and the max-steps guard.
-- Error shape returned to the model, and per-call token/cost accounting (SDK gives per-turn totals only).
-- Conversation storage format (mine is a plain append-only JSONL; the SDK's session store is internal).
-- Deterministic offline testing: with the API I test the real loop with a fake client; with the SDK I can only test
-  the config and my tool handlers, since the loop lives inside the Claude Code process.
-
-## 5. Which one I would choose
-For this personal agent: **the SDK**, if the measured cost difference is small. It removes ~170 lines of loop,
-history, compaction and caching code that I would otherwise have to maintain, and the behaviour that matters
-(tools, memory file, resume) is configuration. I would pick the **API** version if the numbers show the SDK's overhead is
-large per turn, or if I needed per-turn control of context (relevance-based memory) as memory grows.
+## 5. Which version I would choose
+Without measurements, my choice rests on the design: the **SDK**, because ~170 lines of loop, history, compaction and caching become configuration
+(9 lines vs 177), and nothing in this agent needs per-call control. I would switch to the **API** version if measurements showed a large per-turn
+overhead in the SDK, or once memory grows enough that relevance-based context selection matters. This should be confirmed by running both versions.
