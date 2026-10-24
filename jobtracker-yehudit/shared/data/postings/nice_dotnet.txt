@@ -1,0 +1,10 @@
+Company: NICE
+Title: Backend Developer (C#/.NET Core)
+Location: Ra'anana (hybrid)
+About: NICE builds cloud software for customer experience and financial crime prevention.
+Requirements:
+- 2+ years of experience with C# and ASP.NET Core
+- REST Web API design, SQL Server or Oracle
+- Experience with CI/CD pipelines (Azure DevOps) and automated testing
+- Good English
+Nice to have: Angular, Playwright, Azure

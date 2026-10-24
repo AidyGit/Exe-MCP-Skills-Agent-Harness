@@ -1,0 +1,26 @@
+{
+  "agent": "job-search tracker",
+  "sessions": [
+    {"name": "session-1", "turns": [
+      "Add a job: company Elbit Systems, title C#/.NET Backend Developer, status applied.",
+      "Remember this as my search criteria: I only want C#/.NET roles, and I am not interested in Java positions.",
+      "Read the posting in shared/data/postings/nice_dotnet.txt and add it to my tracker as applied.",
+      "Elbit Systems invited me to an interview - update its status."
+    ]},
+    {"name": "session-2", "turns": [
+      "What stack am I looking for in my job search?",
+      "Add a job: company Wix, title Senior Java Developer, status applied.",
+      "Give me a short summary of where my applications stand."
+    ]}
+  ],
+  "checks": [
+    {"name": "elbit_saved_as_interview", "type": "job_exists", "company": "Elbit Systems", "status": "interview"},
+    {"name": "criteria_persisted_in_memory", "type": "memory_contains", "text": ".NET"},
+    {"name": "nice_added_from_posting_file", "type": "job_source_contains", "text": "nice_dotnet.txt"},
+    {"name": "nice_company_recorded", "type": "job_exists", "company": "NICE", "status": "applied"},
+    {"name": "external_tool_used_turn3", "type": "tool_used", "turn": 2, "tool": "fetch_job_posting"},
+    {"name": "memory_recalled_in_session2", "type": "reply_contains", "turn": 4, "any": [".NET", "C#"]},
+    {"name": "contradicting_java_job_not_added_blindly", "type": "job_absent", "company": "Wix"},
+    {"name": "state_has_both_real_jobs", "type": "job_count_at_least", "n": 2}
+  ]
+}
